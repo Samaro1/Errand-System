@@ -1,5 +1,28 @@
 {%extends "user/base.html" %}
 
 {% block body %}
-    
+    <h2>Sign up </h2>
+
+    {% if message %}
+        <p style="color:red; text-align:center;">{{ message }}</p>
+    {% endif %}
+
+    <form action="{% url 'signup' %}" method="post">
+        {% csrf_token %}
+        
+        <label for="username">Username:</label><br>
+        <input type="text" name="username" id="username" required><br><br>
+
+        <label for="password">Password:</label><br>
+        <input type="password" name="password" id="password" required><br><br>
+
+        <button type="submit">
+            Sign Up
+        </button>
+    </form>
+
+    <p style="text-align:center; margin-top:15px;">
+        Already have an account? <a href="{% url 'login' %}">Login</a>
+    </p>
+</div>
 {% endblock %}
