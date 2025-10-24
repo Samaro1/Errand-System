@@ -1,17 +1,21 @@
 from django.db import models
 
 # Create your models here.
+
 class Customer(models.Model):
-    fname= models.CharField(max_length=30, null= True, blank= True)
-    lname=  models.CharField(max_length=30, null= True, blank=True)
-    username= models.CharField(max_length= 20)
-    email= models.EmailField(null= True, blank= True)
-    phone_num= models.CharField(max_length= 11, null=True, blank=True)
-    password= models.CharField()
-    account_num= models.CharField(max_length=10, blank=True,null=True)
-    bank_name= models.CharField(blank=True, null=True)
+    username = models.CharField(max_length=20, unique=True)
+    #To be hashed later
+    password = models.CharField(max_length=128)
 
-    def  __str__(self):
-        return f"User {self.first} {self.last} phone number: {self.phone_num}"
-    
+    def __str__(self):
+        return self.username
 
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(Customer, on_delete=models.CASCADE, related_name="profile")
+    account_num= models.CharField(max_length=10, blank=False,null=False)
+    bank_name= models.CharField(blank=False,null=False)
+    fname= models.CharField(max_length=30,blank=False,null=False)
+    lname=  models.CharField(max_length=30,blank=False,null=False)
+    email= models.EmailField(blank=False,null=False)
+    phone_num= models.CharField(max_length= 11, blank=False,null=False)

@@ -1,23 +1,35 @@
 {%extends "user/base.html" %}
 
 {% block body %}
+
+<div>
+    {% if message %}
+        <p style="color: green;">{{ message }}</p>
+    {% endif %}
+</div>
         <form action="{% url 'verify' %}" method="post">
-        {% csrf_token %}
-        
-        <label for="fname">First name:</label><br>
-        <input type="text" name="fname" id="fname" required><br><br>
+    {% csrf_token %}
+    <label for="fname">First name:</label>
+    <input type="text" name="fname" id="fname" value="{{ profile.fname }}" required><br><br>
 
-        <label for="lname">Last name:</label><br>
-        <input type="text" name="fname" id="lname" required><br><br>
+    <label for="lname">Last name:</label>
+    <input type="text" name="lname" id="lname" value="{{ profile.lname }}" required><br><br>
 
-        <label for="email">Email:</label><br>
-        <input type="email" name="email" id="email" required><br><br>
+    <label for="email">Email:</label>
+    <input type="email" name="email" id="email" value="{{ profile.email }}" required><br><br>
 
-        <label for="phone_num">Phone Number:</label><br>
-        <input type="text" name="phone_num" id="phone_num" required><br><br>
-        <button type="submit">
-            Login
-        </button>
-    </form>
+    <label for="phone_num">Phone Number:</label>
+    <input type="tel" name="phone_num" id="phone_num" value="{{ profile.phone_num }}" required><br><br>
+
+    <label for="bank_name">Bank Name:</label>
+    <input type="text" name="bank_name" id="bank_name" value="{{ profile.bank_name }}" required><br><br>
+
+    <label for="account_num">Account Number:</label>
+    <input type="text" name="account_num" id="account_num" value="{{ profile.account_num }}" required><br><br>
+
+    <button type="submit">
+        {% if is_new %} Verify {% else %} Update {% endif %}
+    </button>
+</form>
 
 {% endblock %}
