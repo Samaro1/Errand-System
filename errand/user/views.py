@@ -34,12 +34,9 @@ def login_view(request):
     else:
         return render(request, "user/login.html")
 
+@login_required
 def verify(request):
-    if not request.user.is_authenticated:
-        return redirect("login")
-    
     if request.method == "POST":
-        #As the user is already logged in
         user = request.user
 
         # Check if a profile already exists for this user, if it does, it will update
@@ -64,28 +61,6 @@ def verify(request):
     }
     return render(request, "user/verify.html", context)
 
-def change_password(request):
-    if not request.user.is_authenticated:
-        return redirect("login")
-    
-    if request.method == "POST":
-        #As the user is already logged in
-        user = request.user
-        old_password= request.POST["old_password"]
-        password= Customer.objects.get(user)
-        if old_password == password:
-            new_password =  request.POST["new_password"]
-            password= new_password
-            password.save()
-        else:
-            message = {
-                "message": "Wrong old password"
-            }
-            return HttpResponse(content=message
-            )
-    else:
-        return redirect ("pwdreset")
-    
 @login_required
 def change_password(request):
     if request.method == "POST":
