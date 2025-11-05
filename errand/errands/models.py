@@ -7,7 +7,7 @@ class Errand(models.Model):
     runner = models.ForeignKey("users.Customer", on_delete=models.CASCADE, related_name="taken_errands", null=True, blank=True)
     title = models.CharField(max_length=100)
     description = models.TextField()
-    price = models.DecimalField(max_digits=10)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
     duration = models.DurationField(default=timedelta(hours=2))
     created_at = models.DateTimeField(auto_now_add=True)
     approved= models.BooleanField(default=False)
