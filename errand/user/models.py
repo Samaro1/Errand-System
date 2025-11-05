@@ -19,3 +19,13 @@ class UserProfile(models.Model):
     lname=  models.CharField(max_length=30,blank=False,null=False)
     email= models.EmailField(blank=False,null=False)
     phone_num= models.CharField(max_length= 11, blank=False,null=False)
+
+    # VDA (Virtual Dedicated Account) fields
+    vda_account_number = models.CharField(max_length=20, blank=True, null=True)
+    vda_bank_name = models.CharField(max_length=100, blank=True, null=True)
+    vda_account_name = models.CharField(max_length=100, blank=True, null=True)
+    vda_reference = models.CharField(max_length=50, blank=True, null=True)  # Paystack's VDA reference ID
+
+
+    def __str__(self):
+        return f"{self.user.username} Profile"

@@ -11,9 +11,24 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from dotenv import load_dotenv  # pip install python-dotenv
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# load .env located in project root (next to manage.py)
+load_dotenv(BASE_DIR / ".env")
+
+# Paystack
+PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY")
+PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
+PAYSTACK_BASE_URL = os.getenv("PAYSTACK_BASE_URL", "https://api.paystack.co")
+
+# sanity check during development
+if not PAYSTACK_SECRET_KEY:
+    # don't crash in production automatically; this is just a helpful dev check
+    raise RuntimeError("PAYSTACK_SECRET_KEY not set in environment")
 
 
 # Quick-start development settings - unsuitable for production
@@ -27,12 +42,18 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
 
 # Application definition
 
 INSTALLED_APPS = [
     'user',
     'errands',
+    'payment',
     'rest_framework',
     'django.contrib.admin',
     'django.contrib.auth',
