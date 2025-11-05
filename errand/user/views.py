@@ -1,89 +1,90 @@
-from django.shortcuts import render,redirect
-from django.urls import reverse
-from django.contrib.auth import login, authenticate, logout
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth import authenticate, login, logout
 from .models import Customer, UserProfile
-from django.http import HttpResponseRedirect, HttpResponse
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-# Create your views here.
+from .serializers import CustomerSerializer, UserProfileSerializer
 
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def signup_view(request):
-    if request.method == "POST":
-        username = request.POST["username"]
-        password = request.POST["password"]
+    """
+    Register a new user (Customer)
+    """
+    serializer = CustomerSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        login(request, user)
+        return Response(
+            {"message": "Signup successful", "user": CustomerSerializer(user).data},
+            status=status.HTTP_201_CREATED
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        user = Customer.objects.create_user(username= username, password= password)
-        login(request,user)
-        return redirect("verify")
-    else:
-        return render(request, "user/signup.html")
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def login_view(request):
-    if request.method == "POST":
-        user= request.user
-        username= request.POST["username"]
-        password= request.POST["password"]
+    """
+    Log in an existing user
+    """
+    username = request.data.get("username")
+    password = request.data.get("password")
+    user = authenticate(request, username=username, password=password)
 
-        user= authenticate(request, username= username, password= password)
-        if user is not None:
-            login(request, user)
-            return HttpResponseRedirect(reverse("index"))
-        else:
-            return render (request, "user/login.html",{
-                "message": "Invalid credentials."})
-    else:
-        return render(request, "user/login.html")
+    if user is not None:
+        login(request, user)
+        return Response(
+            {"message": "Login successful", "user": CustomerSerializer(user).data},
+            status=status.HTTP_200_OK
+        )
+    return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-@login_required
-def verify(request):
-    if request.method == "POST":
-        user = request.user
 
-        # Check if a profile already exists for this user, if it does, it will update
-        profile, created = UserProfile.objects.get_or_create(user=user)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verify_user(request):
+    """
+    Create or update user profile (verification step)
+    """
+    user = request.user
+    profile, created = UserProfile.objects.get_or_create(user=user)
 
-        # Update or create the profile fields with form data
-        profile.fname = request.POST["fname"]
-        profile.lname = request.POST["lname"]
-        profile.email = request.POST["email"]
-        profile.phone_num = request.POST["phone_num"]
-        profile.bank_name = request.POST["bank_name"]
-        profile.account_num = request.POST["account_num"]
+    serializer = UserProfileSerializer(profile, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {
+                "message": "Verification details saved successfully",
+                "profile": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Save the profile
-        profile.save()
 
-        return HttpResponse("Verified details saved successfully!")
-
-    context = {
-        "profile": profile,
-        "is_new": created,
-    }
-    return render(request, "user/verify.html", context)
-
-@login_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def change_password(request):
-    if request.method == "POST":
-        old_password = request.POST.get("old_password")
-        new_password = request.POST.get("new_password")
-        confirm_password = request.POST.get("confirm_password")
+    """
+    Change user password securely
+    """
+    old_password = request.data.get("old_password")
+    new_password = request.data.get("new_password")
+    confirm_password = request.data.get("confirm_password")
 
-        user = request.user
+    user = request.user
 
-        # Check if old password matches
-        if not user.check_password(old_password):
-            messages.error(request, "Wrong old password.")
-            return redirect("pwdreset")
+    if not user.check_password(old_password):
+        return Response({"error": "Incorrect old password"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if new_password != confirm_password:
-            messages.error(request, "New passwords do not match.")
-            return redirect("pwdreset")
-        
-        user.set_password(new_password)
-        user.save()
+    if new_password != confirm_password:
+        return Response({"error": "New passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
 
-        messages.success(request, "Password changed successfully. Please log in again.")
-        logout(request)
-        return redirect("login")
+    user.set_password(new_password)
+    user.save()
+    logout(request)
 
-    return render(request, "passwordchange.html")
+    return Response({"message": "Password changed successfully, please log in again."}, status=status.HTTP_200_OK)
