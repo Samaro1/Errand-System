@@ -12,6 +12,9 @@ from .serializers import PaymentSerializer, InitializePaymentSerializer
 from errands.models import Errand
 
 from .models import Payment
+from .utils import release_payment, refund_payment
+import uuid
+from django.utils import timezone as dj_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -190,3 +193,101 @@ def payment_detail(request, reference):
     payment = get_object_or_404(Payment, reference=reference)
     serializer = PaymentSerializer(payment)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def sandbox_operate(request):
+    """
+    Sandbox helper to simulate payment -> payout -> refund flows for frontend demos.
+    Expected JSON: { action: 'pay'|'payout'|'refund', errand_id: int, amount: decimal (optional), reason: str (optional) }
+    Only enabled when DEBUG=True or PAYSTACK_FAKE_IN_TESTS is truthy.
+    """
+    enabled = getattr(settings, "PAYSTACK_FAKE_IN_TESTS", False) or getattr(settings, "DEBUG", False)
+    if not enabled:
+        return Response({"error": "Sandbox endpoint disabled"}, status=status.HTTP_403_FORBIDDEN)
+
+    action = request.data.get("action")
+    errand_id = request.data.get("errand_id")
+    amount = request.data.get("amount")
+    reason = request.data.get("reason")
+
+    if not action or not errand_id:
+        return Response({"error": "action and errand_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        errand = Errand.objects.get(id=errand_id)
+    except Errand.DoesNotExist:
+        return Response({"error": "Errand not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # For pay: create or update a Payment as paid
+    if action == "pay":
+        payer = errand.creator
+        # use provided amount or errand.price
+        amt = amount or errand.price
+        reference = f"SIM-{uuid.uuid4().hex[:12].upper()}"
+        paid_at = dj_timezone.now()
+
+        payment, created = Payment.objects.get_or_create(
+            errand=errand,
+            payer=payer,
+            defaults={
+                "reference": reference,
+                "provider": "Paystack-Sandbox",
+                "amount_expected": amt,
+                "amount_paid": amt,
+                "status": "success",
+                "paid_at": paid_at,
+            },
+        )
+        if not created:
+            # update existing
+            payment.reference = payment.reference or reference
+            payment.amount_paid = amt
+            payment.status = "success"
+            payment.paid_at = paid_at
+            payment.save()
+
+        receipt = {
+            "reference": payment.reference,
+            "amount": float(payment.amount_paid),
+            "paid_at": payment.paid_at.isoformat(),
+            "provider": payment.provider,
+            "status": payment.status,
+        }
+        return Response({"receipt": receipt}, status=status.HTTP_200_OK)
+
+    # For payout: ensure payment exists and is paid, then call release_payment
+    elif action == "payout":
+        payment = Payment.objects.filter(errand=errand, status__in=["success", "pending"]).first()
+        if not payment:
+            return Response({"error": "No paid payment found for this errand"}, status=status.HTTP_404_NOT_FOUND)
+
+        res = release_payment(payment)
+        # Build transfer receipt
+        transfer = {
+            "provider_transfer_id": getattr(payment, "provider_transfer_id", None),
+            "provider_transfer_status": getattr(payment, "provider_transfer_status", None),
+            "recipient": getattr(payment, "recipient_vda", None) or getattr(payment.errand.runner, "userprofile", None) and getattr(payment.errand.runner.userprofile, "paystack_recipient_code", None),
+            "payment_reference": payment.reference,
+            "amount": float(payment.amount_paid or payment.amount_expected),
+        }
+        return Response({"transfer": transfer, "result": res}, status=status.HTTP_200_OK)
+
+    # For refund: call refund_payment
+    elif action == "refund":
+        payment = Payment.objects.filter(errand=errand).first()
+        if not payment:
+            return Response({"error": "Payment not found for this errand"}, status=status.HTTP_404_NOT_FOUND)
+
+        res = refund_payment(payment, reason=reason)
+        refund = {
+            "provider_refund_id": getattr(payment, "provider_refund_id", None),
+            "provider_refund_status": getattr(payment, "provider_refund_status", None),
+            "payment_reference": payment.reference,
+            "amount": float(payment.amount_paid or payment.amount_expected),
+        }
+        return Response({"refund": refund, "result": res}, status=status.HTTP_200_OK)
+
+    else:
+        return Response({"error": "Unknown action"}, status=status.HTTP_400_BAD_REQUEST)

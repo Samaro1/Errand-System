@@ -29,6 +29,10 @@ class UserProfile(models.Model):
     email= models.EmailField(blank=False,null=False)
     phone_num= models.CharField(max_length= 11, blank=False,null=False)
 
+    # Persisted bank and provider fields to avoid repeated lookups
+    bank_code = models.CharField(max_length=20, blank=True, null=True)
+    paystack_recipient_code = models.CharField(max_length=100, blank=True, null=True)
+
     # VDA (Virtual Dedicated Account) fields
     vda_account_number = models.CharField(max_length=20, blank=True, null=True)
     vda_bank_name = models.CharField(max_length=100, blank=True, null=True)

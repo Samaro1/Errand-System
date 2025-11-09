@@ -25,6 +25,11 @@ class Payment(models.Model):
     sender_bank = models.CharField(max_length=100, blank=True, null=True)
     sender_account_number = models.CharField(max_length=20, blank=True, null=True)
     recipient_vda = models.CharField(max_length=20, blank=True, null=True)
+    # Provider transfer/refund tracking
+    provider_transfer_id = models.CharField(max_length=100, blank=True, null=True)
+    provider_transfer_status = models.CharField(max_length=50, blank=True, null=True)
+    provider_refund_id = models.CharField(max_length=100, blank=True, null=True)
+    provider_refund_status = models.CharField(max_length=50, blank=True, null=True)
 
     paid_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

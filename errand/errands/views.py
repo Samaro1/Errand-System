@@ -6,6 +6,8 @@ from django.shortcuts import get_object_or_404
 from .models import Errand, Review
 from .serializers import ErrandSerializer
 from user.models import Customer
+from payment.models import Payment
+from payment.utils import release_payment, refund_payment
 
 # ------------------ ERRANDS LIST / FILTER ------------------ #
 @api_view(['GET'])
@@ -30,7 +32,7 @@ def all_errands(request):
         errands = errands.filter(status=status_filter)
 
     # Optional sorting
-    sort_by = request.GET.get("sort_by")  # e.g., created_at, price
+    sort_by = request.GET.get("sort_by")
     order = request.GET.get("order", "desc")
     if sort_by:
         if order == "desc":
@@ -76,6 +78,17 @@ def delete_errand(request, errand_id):
     errand = get_object_or_404(Errand, id=errand_id)
     if errand.creator != request.user:
         return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+    # If no one has taken the errand, refund any payments made by the creator
+    # for this errand (e.g., they paid then deleted before a runner accepted).
+    if not errand.runner:
+        payments = Payment.objects.filter(errand=errand, payer=errand.creator)
+        for p in payments:
+            try:
+                refund_payment(p, reason="Errand deleted before being taken")
+            except NotImplementedError:
+                # In live mode refund not implemented; skip and leave payment as-is
+                pass
+
     errand.delete()
     return Response({"message": "Errand deleted successfully."}, status=status.HTTP_200_OK)
 
@@ -129,8 +142,16 @@ def approve_completion(request, errand_id):
     errand.approved = True
     errand.save()
 
-    # TODO: trigger payment release
-    # release_payment(errand.runner, errand.price)
+    # Trigger payment release to the runner for any payments made on this errand.
+    payments = Payment.objects.filter(errand=errand, payer=errand.creator)
+    for p in payments:
+        # Only release non-refunded payments
+        if not p.refunded:
+            try:
+                release_payment(p)
+            except NotImplementedError:
+                # Live provider not configured; skip silently
+                pass
 
     serializer = ErrandSerializer(errand)
     return Response(serializer.data, status=status.HTTP_200_OK)
