@@ -2,11 +2,14 @@ import logging
 import requests
 from django.conf import settings
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from .serializers import PaymentSerializer, InitializePaymentSerializer
+from errands.models import Errand
 
 from .models import Payment
 
@@ -23,9 +26,13 @@ def initialize_payment(request):
     """
     Initialize a Paystack payment and return authorization URL.
     """
-    user = request.user
-    amount = request.data.get("amount")
-    errand_id = request.data.get("errand_id")
+    user= request.user
+    serializer = InitializePaymentSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    errand_id = serializer.validated_data["errand_id"]
+    amount = serializer.validated_data["amount"]
 
     if not amount or not errand_id:
         return Response({"error": "Amount and errand_id are required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -153,3 +160,25 @@ def paystack_webhook(request):
     except Exception as e:
         logger.error(f"Webhook Error: {e}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_payments(request):
+    """
+    List all payments made by the logged-in user.
+    """
+    payments = Payment.objects.filter(payer=request.user)
+    serializer = PaymentSerializer(payments, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def payment_detail(request, reference):
+    """
+    Retrieve details of a specific payment by reference.
+    """
+    payment = get_object_or_404(Payment, reference=reference)
+    serializer = PaymentSerializer(payment)
+    return Response(serializer.data, status=status.HTTP_200_OK)
