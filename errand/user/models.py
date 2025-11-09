@@ -9,6 +9,15 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.username
+    
+    @property
+    def is_authenticated(self):
+        """Simple compatibility for DRF/Django permission checks in tests."""
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
 
 
 class UserProfile(models.Model):

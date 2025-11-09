@@ -42,10 +42,18 @@ def initialize_payment(request):
         "Content-Type": "application/json",
     }
 
+    # Use fallbacks if using the project's simple Customer model which may not have
+    # full Django User methods/fields (email, get_full_name).
+    email = getattr(user, "email", f"{getattr(user, 'username', 'user')}@example.com")
+    try:
+        name = user.get_full_name()
+    except Exception:
+        name = getattr(user, "username", "user")
+
     data = {
-        "email": user.email,
+        "email": email,
         "amount": int(float(amount) * 100),  # Paystack expects amount in kobo
-        "metadata": {"name": user.get_full_name(), "errand_id": errand_id},
+        "metadata": {"name": name, "errand_id": errand_id},
         "callback_url": "https://dummyforredirect.com/api/payments/verify/",
     }
 

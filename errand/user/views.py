@@ -119,14 +119,14 @@ def verify_and_create_vda(request):
     - Links the created VDA to the user's profile.
     """
     user = request.user
+    # ensure user context exists
 
-    # Validate and update the user's profile data
-    serializer = UserProfileSerializer(user.userprofile, data=request.data, partial=True)
+    # Ensure the user has an associated profile (create if missing),
+    # then validate and update the user's profile data
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    serializer = UserProfileSerializer(profile, data=request.data, partial=True)
     if not serializer.is_valid():
-        return Response(
-            {"error": "Invalid input data", "details": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "Invalid input data", "details": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         with transaction.atomic():

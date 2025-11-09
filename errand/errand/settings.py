@@ -25,6 +25,11 @@ PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
 PAYSTACK_BASE_URL = os.getenv("PAYSTACK_BASE_URL", "https://api.paystack.co")
 
+# When running tests or in CI you may want to fake Paystack calls instead of
+# making real HTTP requests. Set the environment variable PAYSTACK_FAKE_IN_TESTS
+# to a truthy value (1/true/yes) to enable the fake path. Default is False.
+PAYSTACK_FAKE_IN_TESTS = os.getenv("PAYSTACK_FAKE_IN_TESTS", "False").lower() in ("1", "true", "yes")
+
 # sanity check during development
 if not PAYSTACK_SECRET_KEY:
     # don't crash in production automatically; this is just a helpful dev check
@@ -39,8 +44,7 @@ SECRET_KEY = 'django-insecure--i#io&2a^4^up5ai6)+*nqq_%@fw(5o9zh+%vd)4$uebu+4htn
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

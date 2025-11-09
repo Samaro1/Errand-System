@@ -51,7 +51,7 @@ def create_errand(request):
     data = request.data.copy()
     data["creator"] = request.user.id  # Assign logged-in user as creator
 
-    serializer = ErrandSerializer(data=data)
+    serializer = ErrandSerializer(data=data, context={"request": request})
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)

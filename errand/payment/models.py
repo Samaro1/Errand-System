@@ -1,7 +1,5 @@
 from django.db import models
-from django.contrib.auth import get_user_model
 
-User = get_user_model()
 
 class Payment(models.Model):
     STATUS_CHOICES = [
@@ -12,7 +10,7 @@ class Payment(models.Model):
         ("invalid", "Invalid Payment"),
     ]
 
-    payer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="payments_made")
+    payer = models.ForeignKey("user.Customer", on_delete=models.CASCADE, related_name="payments_made")
     errand = models.ForeignKey("errands.Errand", on_delete=models.CASCADE, related_name="errand_payments")
 
     reference = models.CharField(max_length=100, unique=True)

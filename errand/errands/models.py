@@ -1,10 +1,11 @@
 from django.db import models
-from datetime import timedelta, timezone
+from datetime import timedelta
+from django.utils import timezone
 
 # Create your models here.
 class Errand(models.Model):
-    creator = models.ForeignKey("users.Customer", on_delete=models.CASCADE, related_name="posted_errands")
-    runner = models.ForeignKey("users.Customer", on_delete=models.CASCADE, related_name="taken_errands", null=True, blank=True)
+    creator = models.ForeignKey("user.Customer", on_delete=models.CASCADE, related_name="posted_errands")
+    runner = models.ForeignKey("user.Customer", on_delete=models.CASCADE, related_name="taken_errands", null=True, blank=True)
     title = models.CharField(max_length=100)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -27,9 +28,9 @@ class Errand(models.Model):
 
 class Review(models.Model):
     # who is being reviewed
-    runner = models.ForeignKey("users.Customer", on_delete=models.CASCADE, related_name="reviews_received")
+    runner = models.ForeignKey("user.Customer", on_delete=models.CASCADE, related_name="reviews_received")
     # who wrote the review
-    reviewer = models.ForeignKey("users.Customer", on_delete=models.CASCADE, related_name="reviews_given")
+    reviewer = models.ForeignKey("user.Customer", on_delete=models.CASCADE, related_name="reviews_given")
     # link the review to the errand
     errand = models.ForeignKey("errands.Errand", on_delete=models.CASCADE, related_name="reviews")
     rating = models.PositiveSmallIntegerField()  # e.g., 1–5 stars
