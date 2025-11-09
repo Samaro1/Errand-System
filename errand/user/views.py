@@ -6,8 +6,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from .models import Customer, UserProfile
 from .serializers import CustomerSerializer, UserProfileSerializer
-from payment.utils import create_vda_account
-
+from django.db import transaction
+from payment.utils import create_vda_account, PaystackAPIError
 
 def get_tokens_for_user(user):
     """
@@ -114,39 +114,41 @@ def change_password(request):
 @permission_classes([IsAuthenticated])
 def verify_and_create_vda(request):
     """
-    API endpoint for user verification and VDA account creation.
+    Verify the authenticated user's profile and create a Paystack VDA (Virtual Dedicated Account).
+    - Requires: fname, lname, email, phone_num
+    - Links the created VDA to the user's profile.
     """
-    data = request.data
-    required_fields = ['fname', 'lname', 'email', 'phone_num', 'account_num', 'bank_name']
-
-    for field in required_fields:
-        if field not in data or not data[field]:
-            return Response({"error": f"{field} is required"}, status=status.HTTP_400_BAD_REQUEST)
-
     user = request.user
-    try:
-        profile, created = UserProfile.objects.update_or_create(
-            user=user,
-            defaults={
-                "fname": data["fname"],
-                "lname": data["lname"],
-                "email": data["email"],
-                "phone_num": data["phone_num"],
-                "account_num": data["account_num"],
-                "bank_name": data["bank_name"],
-            }
+
+    # Validate and update the user's profile data
+    serializer = UserProfileSerializer(user.userprofile, data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(
+            {"error": "Invalid input data", "details": serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
-        vda_data = create_vda_account(profile)
+    try:
+        with transaction.atomic():
+            profile = serializer.save()
 
-        if not vda_data:
-            return Response({"error": "Failed to create VDA account"}, status=status.HTTP_400_BAD_REQUEST)
+            # Make sure the user has the required fields for VDA creation
+            missing_fields = [f for f in ["fname", "lname", "email", "phone_num"] if not getattr(profile, f, None)]
+            if missing_fields:
+                return Response(
+                    {"error": f"Missing required profile fields: {', '.join(missing_fields)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-        profile.vda_account_number = vda_data.get("account_number")
-        profile.vda_bank_name = vda_data.get("bank_name")
-        profile.vda_account_name = vda_data.get("account_name")
-        profile.vda_reference = vda_data.get("reference")
-        profile.save()
+            # Call Paystack to create the virtual account
+            vda_data = create_vda_account(profile)
+
+            # Update the user's profile with Paystack VDA details
+            profile.vda_account_number = vda_data.get("account_number")
+            profile.vda_bank_name = vda_data.get("bank_name")
+            profile.vda_account_name = vda_data.get("account_name")
+            profile.vda_reference = vda_data.get("reference")
+            profile.save()
 
         return Response({
             "message": "User verified and VDA created successfully",
@@ -158,5 +160,14 @@ def verify_and_create_vda(request):
             }
         }, status=status.HTTP_201_CREATED)
 
+    except PaystackAPIError as e:
+        return Response(
+            {"error": f"Paystack API Error: {str(e)}"},
+            status=status.HTTP_502_BAD_GATEWAY  # 502 → bad upstream service
+        )
+
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"error": f"Internal Server Error: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

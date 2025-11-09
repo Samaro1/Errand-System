@@ -8,41 +8,51 @@ from datetime import datetime
 PAYSTACK_BASE_URL = "https://api.paystack.co"
 HEADERS = {"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"}
 
-def create_vda_account(user):
-    """
-    Create a Virtual Dedicated Account (VDA) for a user.
-    This example assumes you are using Monnify or a similar provider.
-    """
+# payment/utils.py
+import requests
+from django.conf import settings
 
-    url = "https://sandbox.monnify.com/api/v1/bank-transfer/reserved-accounts"  # example endpoint
+class PaystackAPIError(Exception):
+    """Custom exception for Paystack API errors"""
+    pass
 
+def create_vda_account(user_profile):
+    """
+    Create a Virtual Deposit Account (VDA) on Paystack for a user.
+    Args:
+        user_profile: UserProfile instance containing fname, lname, email.
+    Returns:
+        dict: VDA account details (account_number, bank_name, account_name, reference)
+    Raises:
+        PaystackAPIError: If the API request fails.
+    """
+    url = f"{settings.PAYSTACK_BASE_URL}/virtual-account-numbers"
     headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {settings.MONNIFY_API_KEY}"  # or token if you authenticate separately
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json"
     }
-
+    
     payload = {
-        "accountReference": f"user_{user.id}_vda",
-        "accountName": f"{user.first_name} {user.last_name}",
-        "currencyCode": "NGN",
-        "contractCode": settings.MONNIFY_CONTRACT_CODE,
-        "customerEmail": user.email,
-        "bvn": user.profile.bvn if hasattr(user, "profile") else None,
-        "getAllAvailableBanks": False,
-        "preferredBanks": ["Providus Bank"]  # optional
+        "customer": {
+            "name": f"{user_profile.fname} {user_profile.lname}",
+            "email": user_profile.email
+        },
+        "preferred_bank": "all"  # Let Paystack pick a bank automatically
     }
 
     response = requests.post(url, json=payload, headers=headers)
     data = response.json()
-
-    if response.status_code == 200 and data.get("requestSuccessful"):
-        return {
-            "accountNumber": data["responseBody"]["accountNumber"],
-            "accountName": data["responseBody"]["accountName"],
-            "bankName": data["responseBody"]["bankName"],
-        }
-    else:
-        raise Exception(f"Failed to create VDA: {data}")
+    
+    if not data.get("status"):
+        raise PaystackAPIError(f"Paystack error: {data.get('message')}")
+    
+    account_info = data.get("data", {})
+    return {
+        "account_number": account_info.get("account_number"),
+        "bank_name": account_info.get("bank_name"),
+        "account_name": account_info.get("account_name"),
+        "reference": account_info.get("reference")
+    }
     
     
 def initialize_payment(amount, email, reference):
