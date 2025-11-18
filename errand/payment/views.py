@@ -15,6 +15,11 @@ from .models import Payment
 from .utils import release_payment, refund_payment
 import uuid
 from django.utils import timezone as dj_timezone
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_protect
+from django.contrib import messages
+from django.urls import reverse
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +125,14 @@ def verify_payment(request, reference):
             payment.sender_bank = data.get("authorization", {}).get("bank")
             payment.sender_account_number = data.get("authorization", {}).get("last4")
             payment.save()
+            # If payment succeeded, mark the linked errand as posted (visible)
+            try:
+                if payment.status == "success" and getattr(payment, "errand", None):
+                    err = payment.errand
+                    err.status = "pending"
+                    err.save()
+            except Exception:
+                logger.exception("Failed to update errand status after payment verification")
 
         return Response({
             "message": "Payment verified successfully",
@@ -162,6 +175,14 @@ def paystack_webhook(request):
                 payment.sender_account_number = event["data"]["authorization"]["last4"]
                 payment.save()
 
+            # mark errand visible
+            try:
+                if getattr(payment, "errand", None):
+                    payment.errand.status = "pending"
+                    payment.errand.save()
+            except Exception:
+                logger.exception("Failed to update errand status from webhook")
+
             logger.info(f"Payment {reference} updated via webhook.")
             return Response({"message": "Payment updated successfully."}, status=status.HTTP_200_OK)
 
@@ -196,6 +217,95 @@ def payment_detail(request, reference):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def api_simulate_deposit(request, payment_id):
+    """API: Simulate a deposit (mark payment as paid) for sandbox/testing.
+
+    Only enabled when PAYSTACK_FAKE_IN_TESTS or DEBUG or running tests.
+    Only the payer (or staff) may simulate their own deposit.
+    """
+    import sys
+    enabled = getattr(settings, "PAYSTACK_FAKE_IN_TESTS", False) or getattr(settings, "DEBUG", False) or ("test" in sys.argv)
+    if not enabled:
+        return Response({"error": "Sandbox disabled"}, status=status.HTTP_403_FORBIDDEN)
+
+    payment = get_object_or_404(Payment, id=payment_id)
+    # Only payer may mark their own payment as paid (or staff)
+    if payment.payer != request.user and not request.user.is_staff:
+        return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+    payment.amount_paid = payment.amount_expected
+    payment.status = "success"
+    payment.paid_at = dj_timezone.now()
+    payment.save()
+    # mark errand visible
+    try:
+        if getattr(payment, "errand", None):
+            payment.errand.status = "pending"
+            payment.errand.save()
+    except Exception:
+        logger.exception("Failed to update errand after api_simulate_deposit")
+
+    serializer = PaymentSerializer(payment)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def api_simulate_payout(request, payment_id):
+    """API: Simulate a payout (release payment to runner) for sandbox/testing.
+
+    Only the errand creator or staff can trigger payout.
+    """
+    import sys
+    enabled = getattr(settings, "PAYSTACK_FAKE_IN_TESTS", False) or getattr(settings, "DEBUG", False) or ("test" in sys.argv)
+    if not enabled:
+        return Response({"error": "Sandbox disabled"}, status=status.HTTP_403_FORBIDDEN)
+
+    payment = get_object_or_404(Payment, id=payment_id)
+    if not payment.errand:
+        return Response({"error": "Payment has no associated errand"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.user != payment.errand.creator and not request.user.is_staff:
+        return Response({"error": "Only errand creator can trigger payout"}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        res = release_payment(payment)
+    except Exception as e:
+        logger.exception("api_simulate_payout error")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    serializer = PaymentSerializer(payment)
+    return Response({"payment": serializer.data, "result": res}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def api_simulate_refund(request, payment_id):
+    """API: Simulate a refund for sandbox/testing.
+
+    Only the errand creator or staff may trigger a refund via API.
+    """
+    import sys
+    enabled = getattr(settings, "PAYSTACK_FAKE_IN_TESTS", False) or getattr(settings, "DEBUG", False) or ("test" in sys.argv)
+    if not enabled:
+        return Response({"error": "Sandbox disabled"}, status=status.HTTP_403_FORBIDDEN)
+
+    payment = get_object_or_404(Payment, id=payment_id)
+    if request.user != payment.errand.creator and not request.user.is_staff:
+        return Response({"error": "Only errand creator can trigger refund"}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        res = refund_payment(payment, reason=request.data.get("reason"))
+    except Exception as e:
+        logger.exception("api_simulate_refund error")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    serializer = PaymentSerializer(payment)
+    return Response({"payment": serializer.data, "result": res}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
 @permission_classes([AllowAny])
 def sandbox_operate(request):
     """
@@ -203,7 +313,9 @@ def sandbox_operate(request):
     Expected JSON: { action: 'pay'|'payout'|'refund', errand_id: int, amount: decimal (optional), reason: str (optional) }
     Only enabled when DEBUG=True or PAYSTACK_FAKE_IN_TESTS is truthy.
     """
-    enabled = getattr(settings, "PAYSTACK_FAKE_IN_TESTS", False) or getattr(settings, "DEBUG", False)
+    # Allow sandbox when explicitly enabled, when DEBUG=True, or when running tests
+    import sys
+    enabled = getattr(settings, "PAYSTACK_FAKE_IN_TESTS", False) or getattr(settings, "DEBUG", False) or ("test" in sys.argv)
     if not enabled:
         return Response({"error": "Sandbox endpoint disabled"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -248,6 +360,13 @@ def sandbox_operate(request):
             payment.paid_at = paid_at
             payment.save()
 
+        # Ensure errand becomes visible once the creator has paid
+        try:
+            errand.status = "pending"
+            errand.save()
+        except Exception:
+            logger.exception("Failed to mark errand pending after sandbox pay")
+
         receipt = {
             "reference": payment.reference,
             "amount": float(payment.amount_paid),
@@ -291,3 +410,135 @@ def sandbox_operate(request):
 
     else:
         return Response({"error": "Unknown action"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ------------------ WEB (server-rendered) PAYMENT VIEWS ------------------ #
+@login_required
+def web_payments_list(request):
+    payments = Payment.objects.filter(payer=request.user).order_by('-created_at')
+    return render(request, "payments/list.html", {"payments": payments})
+
+
+@login_required
+def web_payment_detail(request, payment_id):
+    payment = get_object_or_404(Payment, id=payment_id)
+    return render(request, "payments/detail.html", {"payment": payment})
+
+
+@login_required
+@csrf_protect
+def web_initialize_payment(request):
+    # optional errand_id passed via GET
+    errand_id = request.GET.get("errand_id")
+
+    # If an errand_id was provided, show a read-only page with VDA instructions
+    # and ensure there is a pending Payment record for this errand & payer so
+    # the sandbox simulate button can operate.
+    if errand_id:
+        try:
+            errand = Errand.objects.get(id=errand_id)
+        except Errand.DoesNotExist:
+            messages.error(request, "Errand not found")
+            return redirect("errands:list")
+
+        # In sandbox/dev mode create or get a pending payment for this errand & payer
+        payment, created = Payment.objects.get_or_create(
+            payer=request.user,
+            errand=errand,
+            defaults={
+                "reference": f"WEB-{uuid.uuid4().hex[:12].upper()}",
+                "provider": "Paystack-Sandbox",
+                "amount_expected": errand.price,
+                "status": "pending",
+            },
+        )
+
+        # Deposit instructions (platform VDA) from settings
+        vda = getattr(settings, "PAYSTACK_DEPOSIT_INSTRUCTIONS", {})
+
+        return render(request, "payments/initialize.html", {
+            "errand": errand,
+            "payment": payment,
+            "vda": vda,
+        })
+
+    # POST fallback: keep existing initialize behavior if someone POSTs amount directly
+    if request.method == "POST":
+        errand_id = request.POST.get("errand_id")
+        amount = request.POST.get("amount")
+        if not errand_id or not amount:
+            messages.error(request, "Errand and amount are required")
+            return redirect(request.path)
+
+        # create payment record (simulate initialize)
+        reference = f"WEB-{uuid.uuid4().hex[:12].upper()}"
+        payment = Payment.objects.create(
+            payer=request.user,
+            errand_id=errand_id,
+            reference=reference,
+            provider="Paystack-Sandbox",
+            amount_expected=amount,
+            status="pending",
+        )
+        messages.success(request, "Payment initialized. Use simulate to mark paid in sandbox.")
+        return redirect(reverse("payment:web_payment_detail", args=[payment.id]))
+
+    return render(request, "payments/initialize.html", {})
+
+
+@login_required
+@csrf_protect
+def web_simulate_deposit(request, payment_id):
+    payment = get_object_or_404(Payment, id=payment_id)
+    # Only allow payer to simulate deposit
+    if payment.payer != request.user:
+        messages.error(request, "Unauthorized")
+        return redirect(reverse("payment:web_payment_detail", args=[payment.id]))
+
+    payment.amount_paid = payment.amount_expected
+    payment.status = "success"
+    payment.paid_at = dj_timezone.now()
+    payment.save()
+    # mark associated errand visible
+    try:
+        if getattr(payment, "errand", None):
+            payment.errand.status = "pending"
+            payment.errand.save()
+    except Exception:
+        logger.exception("Failed to update errand after simulate_deposit")
+    messages.success(request, "Payment simulated as paid (sandbox)")
+    return redirect(reverse("payment:web_payment_detail", args=[payment.id]))
+
+
+@login_required
+@csrf_protect
+def web_simulate_payout(request, payment_id):
+    payment = get_object_or_404(Payment, id=payment_id)
+    # Only creator or admins can trigger payout in demo
+    if request.user != payment.errand.creator:
+        messages.error(request, "Only errand creator can trigger payout")
+        return redirect(reverse("payment:web_payment_detail", args=[payment.id]))
+
+    try:
+        res = release_payment(payment)
+        messages.success(request, "Payout simulated (sandbox)")
+    except Exception as e:
+        messages.error(request, f"Payout error: {e}")
+    return redirect(reverse("payment:web_payment_detail", args=[payment.id]))
+
+
+@login_required
+@csrf_protect
+def web_simulate_refund(request, payment_id):
+    payment = get_object_or_404(Payment, id=payment_id)
+    # Only creator can refund their payment
+    if request.user != payment.errand.creator:
+        messages.error(request, "Only errand creator can trigger refund")
+        return redirect(reverse("payment:web_payment_detail", args=[payment.id]))
+
+    try:
+        res = refund_payment(payment, reason="Sandbox refund via web")
+        messages.success(request, "Refund simulated (sandbox)")
+    except Exception as e:
+        messages.error(request, f"Refund error: {e}")
+    return redirect(reverse("payment:web_payment_detail", args=[payment.id]))

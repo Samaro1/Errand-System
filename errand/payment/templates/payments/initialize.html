@@ -1,0 +1,30 @@
+{% extends 'user/base.html' %}
+
+{% block body %}
+  <h1>Payment instructions</h1>
+
+  {% if errand and payment %}
+    <div class="card">
+      <p><strong>Errand:</strong> {{ errand.title }} (ID: <code>{{ errand.id }}</code>)</p>
+      <p><strong>Amount to pay:</strong> ₦{{ payment.amount_expected }}</p>
+      <hr>
+      <h3>Send funds to this account (VDA)</h3>
+      <p><strong>Account name:</strong> {{ vda.account_name }}</p>
+      <p><strong>Bank:</strong> {{ vda.bank_name }}</p>
+      <p><strong>Account number:</strong> <code>{{ vda.account_number }}</code></p>
+      <p><strong>Reference:</strong> {{ vda.reference }}</p>
+
+      <p class="muted">After sending funds to the above account, click the "I have paid (sandbox)" button to simulate deposit (sandbox only).</p>
+
+      {% if user.is_authenticated and payment.payer == user %}
+        <form method="post" action="{% url 'payment:web_simulate_deposit' payment.id %}">
+          {% csrf_token %}
+          <button type="submit" class="btn">I have paid (sandbox)</button>
+        </form>
+      {% endif %}
+    </div>
+  {% else %}
+    <p>No errand selected. <a href="{% url 'errands:create' %}">Create an errand</a>.</p>
+  {% endif %}
+
+{% endblock %}

@@ -8,6 +8,59 @@ from .models import Customer, UserProfile
 from .serializers import CustomerSerializer, UserProfileSerializer
 from django.db import transaction
 from payment.utils import create_vda_account, PaystackAPIError
+from django.shortcuts import render, redirect
+from django.contrib.auth import login as auth_login, logout as auth_logout
+from django.views.decorators.csrf import csrf_protect
+from django.contrib.auth.decorators import login_required
+
+
+@csrf_protect
+def web_signup(request):
+    """Render a signup form (HTML) and create a Customer, then log them in via session."""
+    if request.method == "POST":
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+        if not username or not password:
+            return render(request, "user/signup.html", {"message": "Username and password required"})
+        # prevent duplicate usernames
+        if Customer.objects.filter(username=username).exists():
+            return render(request, "user/signup.html", {"message": "Username already taken"})
+        user = Customer.objects.create(username=username, password=password)
+        # log in via Django session
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            auth_login(request, user)
+            # After signup, send user to the dashboard
+            return redirect("errands:dashboard")
+        return render(request, "user/signup.html", {"message": "Could not log you in"})
+    return render(request, "user/signup.html")
+
+
+@csrf_protect
+def web_login(request):
+    """Render login form and authenticate user using session auth."""
+    if request.method == "POST":
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            auth_login(request, user)
+            # After login, send user to the dashboard
+            return redirect("errands:dashboard")
+        return render(request, "user/login.html", {"message": "Invalid credentials"})
+    return render(request, "user/login.html")
+
+
+def web_logout(request):
+    auth_logout(request)
+    return redirect("/")
+
+
+@login_required
+def web_profile(request):
+    """Simple profile page for the authenticated user (web)."""
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    return render(request, "user/profile.html", {"profile": profile})
 
 def get_tokens_for_user(user):
     """

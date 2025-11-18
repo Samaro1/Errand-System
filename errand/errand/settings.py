@@ -30,10 +30,42 @@ PAYSTACK_BASE_URL = os.getenv("PAYSTACK_BASE_URL", "https://api.paystack.co")
 # to a truthy value (1/true/yes) to enable the fake path. Default is False.
 PAYSTACK_FAKE_IN_TESTS = os.getenv("PAYSTACK_FAKE_IN_TESTS", "False").lower() in ("1", "true", "yes")
 
+# Default platform deposit VDA/instructions (used to show where creators should send
+# money when posting errands). You can override these in production with real values.
+PAYSTACK_DEPOSIT_INSTRUCTIONS = {
+    "account_number": os.getenv("PLATFORM_VDA_ACCOUNT_NUMBER", "0000000000"),
+    "bank_name": os.getenv("PLATFORM_VDA_BANK", "TestBank"),
+    "account_name": os.getenv("PLATFORM_VDA_ACCOUNT_NAME", "Errand Platform"),
+    "reference": os.getenv("PLATFORM_VDA_REFERENCE", "PLATFORMVDA1"),
+}
+
 # sanity check during development
 if not PAYSTACK_SECRET_KEY:
     # don't crash in production automatically; this is just a helpful dev check
     raise RuntimeError("PAYSTACK_SECRET_KEY not set in environment")
+
+
+# Illegal keywords to check when users create errands via the web form.
+# Move here to allow tuning without editing view code.
+ILLEGAL_KEYWORDS = [
+    "drugs",
+    "cocaine",
+    "heroin",
+    "meth",
+    "weapon",
+    "weapons",
+    "gun",
+    "firearm",
+    "bomb",
+    "explosive",
+    "kill",
+    "murder",
+    "assault",
+    "steal",
+    "fraud",
+    "hack",
+    "illegal",
+]
 
 
 # Quick-start development settings - unsuitable for production
@@ -48,12 +80,18 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
 }
+
+# Use our custom backend which authenticates against the local Customer model.
+AUTHENTICATION_BACKENDS = [
+    "user.backends.CustomerBackend",
+]
 
 # Application definition
 
@@ -62,6 +100,7 @@ INSTALLED_APPS = [
     'errands',
     'payment',
     'rest_framework',
+    'django.contrib.humanize',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -146,6 +185,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Serve project-level static/ during development (helps the CSS placed at /static/)
+STATICFILES_DIRS = [
+    str(BASE_DIR / "static"),
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

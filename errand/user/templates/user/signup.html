@@ -7,7 +7,7 @@
         <p style="color:red; text-align:center;">{{ message }}</p>
     {% endif %}
 
-    <form action="{% url 'signup' %}" method="post">
+    <form action="{% url 'web_signup' %}" method="post">
         {% csrf_token %}
         
         <label for="username">Username:</label><br>
@@ -22,7 +22,7 @@
     </form>
 
     <p style="text-align:center; margin-top:15px;">
-        Already have an account? <a href="{% url 'login' %}">Login</a>
+        Already have an account? <a href="{% url 'web_login' %}">Login</a>
     </p>
 </div>
 {% endblock %}

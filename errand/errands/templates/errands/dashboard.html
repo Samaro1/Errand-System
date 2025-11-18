@@ -1,0 +1,86 @@
+{% extends 'user/base.html' %}
+{% load humanize %}
+
+{% block body %}
+  <h1>{{ greeting }}</h1>
+
+  <section class="dashboard-section">
+    <h2>Available errands</h2>
+    {% if available_errands %}
+      <div class="card-grid">
+        {% for e in available_errands %}
+          <div class="card">
+            <h3><a href="{% url 'errands:detail' e.id %}">{{ e.title }}</a></h3>
+            <p>{{ e.description|truncatechars:120 }}</p>
+            <p class="muted">Price: {{ e.price }} • Posted {{ e.created_at|naturaltime }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>No available errands right now.</p>
+    {% endif %}
+  </section>
+
+  <section class="dashboard-section">
+    <h2>Accepted errands</h2>
+    {% if accepted_errands %}
+      <div class="card-grid">
+        {% for e in accepted_errands %}
+          <div class="card">
+            <h3><a href="{% url 'errands:detail' e.id %}">{{ e.title }}</a></h3>
+            <p>{{ e.description|truncatechars:120 }}</p>
+            <p class="muted">Status: <strong>{{ e.status }}</strong> • Price: {{ e.price }} • Accepted {{ e.updated_at|naturaltime }}</p>
+            <div style="margin-top:12px">
+              <a class="btn-ghost" href="{% url 'errands:detail' e.id %}">View</a>
+              {% if e.runner == request.user and e.status == 'active' %}
+                <form method="post" action="{% url 'errands:web_mark_completed' e.id %}" style="display:inline">
+                  {% csrf_token %}
+                  <button type="submit">Mark completed</button>
+                </form>
+              {% elif e.runner == request.user and e.status == 'awaiting_approval' %}
+                <span class="badge pending">Awaiting approval</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>You haven't accepted any errands yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="dashboard-section">
+    <h2>Your errands</h2>
+    {% if my_errands %}
+      <ul class="simple-list">
+        {% for e in my_errands %}
+          <li>
+            <strong>{{ e.title }}</strong> — {{ e.status }} • {{ e.price }} · Posted {{ e.created_at|naturaltime }}
+            <a href="{% url 'errands:detail' e.id %}">view</a>
+            {% if not e.runner and e.creator == request.user %}
+              <a href="{% url 'errands:web_delete' e.id %}" class="danger">cancel</a>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>You haven't posted any errands yet. <a href="{% url 'errands:create' %}">Create one</a>.</p>
+    {% endif %}
+  </section>
+
+  <section class="dashboard-section">
+    <h2>Your reviews</h2>
+    {% if my_reviews %}
+      <ul class="simple-list">
+        {% for r in my_reviews %}
+          <li>
+            Review for {{ r.runner.username }} on "{{ r.errand.title }}": {{ r.rating }}★ — {{ r.feedback|default:"(no comment)" }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>You haven't written any reviews yet.</p>
+    {% endif %}
+  </section>
+
+{% endblock %}

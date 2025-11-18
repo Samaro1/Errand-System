@@ -1,0 +1,66 @@
+{% extends 'user/base.html' %}
+
+{% block body %}
+<h1>{{ errand.title }}</h1>
+<p>{{ errand.description }}</p>
+<p>Price: {{ errand.price }}</p>
+<p>Status: <strong>{{ errand.status }}</strong></p>
+<p>Creator: {{ errand.creator.username }}</p>
+<p>Runner: {% if errand.runner %}{{ errand.runner.username }}{% else %}-{% endif %}</p>
+
+<h3>Payments</h3>
+{% if payments %}
+  <ul>
+  {% for p in payments %}
+    <li>{{ p.reference }} - {{ p.amount_paid }} - {{ p.status }} - Transfer: {{ p.provider_transfer_id }} Refund: {{ p.provider_refund_id }}</li>
+  {% endfor %}
+  </ul>
+{% else %}
+  <p>No payments yet.</p>
+{% endif %}
+
+{% if errand.status == 'payment_pending' and user == errand.creator %}
+  <div style="margin-top:12px;">
+    <p class="muted">This errand is awaiting payment before it becomes publicly available.</p>
+    <a class="btn-ghost" href="{% url 'payment:web_initialize_payment' %}?errand_id={{ errand.id }}">Pay now</a>
+  </div>
+{% endif %}
+
+<p><a href="{% url 'errands:list' %}">Back to list</a></p>
+{% if user.is_authenticated %}
+  {% if errand.runner and errand.runner == user and errand.status != 'awaiting_approval' and errand.status != 'completed' %}
+    <form method="post" action="{% url 'errands:web_mark_completed' errand.id %}">
+      {% csrf_token %}
+      <button type="submit">Mark Completed</button>
+    </form>
+  {% endif %}
+
+  {% if errand.creator == user and errand.status == 'awaiting_approval' %}
+    <form method="post" action="{% url 'errands:web_approve' errand.id %}">
+      {% csrf_token %}
+      <button type="submit">Approve Completion (release payment)</button>
+    </form>
+  {% endif %}
+
+  {% if not errand.runner and errand.creator != user %}
+    <form method="post" action="{% url 'errands:web_accept' errand.id %}">
+      {% csrf_token %}
+      <button type="submit">Accept Errand</button>
+    </form>
+  {% endif %}
+
+  {% if errand.creator == user %}
+    <form method="post" action="{% url 'errands:web_delete' errand.id %}">
+      {% csrf_token %}
+      <button type="submit">Delete Errand</button>
+    </form>
+  {% endif %}
+{% endif %}
+
+{% comment %} Add quick link to initialize payment for this errand {% endcomment %}
+<p>
+  {% if user.is_authenticated %}
+    <a href="{% url 'payment:web_initialize_payment' %}?errand_id={{ errand.id }}">I want to pay for this errand</a>
+  {% endif %}
+</p>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends 'user/base.html' %}
+{% load humanize %}
+
+{% block body %}
+<div class="top-actions">
+  <h1>Available Errands</h1>
+  <div>
+    <a class="btn-ghost" href="{% url 'errands:create' %}">+ Create</a>
+    <a class="btn-ghost" href="{% url 'web_logout' %}">Logout</a>
+  </div>
+</div>
+
+<h2>Open errands</h2>
+<div class="card-grid">
+{% for e in available_errands %}
+  <div class="card">
+    <h3><a href="{% url 'errands:detail' e.id %}">{{ e.title }}</a></h3>
+        <div class="muted">By {{ e.creator.username }} · Price: ₦{{ e.price }} · Posted {{ e.created_at|naturaltime }}</div>
+    <p style="margin:8px 0">{{ e.description|truncatechars:120 }}</p>
+    <div class="actions">
+      <span class="badge success">{{ e.status }}</span>
+      {% if not e.runner and e.creator != request.user %}
+        <form method="post" action="{% url 'errands:web_accept' e.id %}" style="display:inline; float:right;">
+          {% csrf_token %}
+          <button type="submit">Accept</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+{% empty %}
+  <p>No open errands right now.</p>
+{% endfor %}
+</div>
+
+<h2>Your errands</h2>
+<ul class="simple-list">
+{% for e in my_errands %}
+  <li>
+    <strong>{{ e.title }}</strong> — {{ e.status }} • ₦{{ e.price }} · Posted {{ e.created_at|naturaltime }}
+    <a href="{% url 'errands:detail' e.id %}">view</a>
+    {% if not e.runner %}
+      <a href="{% url 'errands:web_delete' e.id %}" class="danger">cancel</a>
+    {% endif %}
+    {% if e.status == 'payment_pending' and e.creator == request.user %}
+      <a href="{% url 'payment:web_initialize_payment' %}?errand_id={{ e.id }}">Complete payment</a>
+    {% endif %}
+  </li>
+{% empty %}
+  <li>You have not posted any errands yet.</li>
+{% endfor %}
+</ul>
+
+{% endblock %}

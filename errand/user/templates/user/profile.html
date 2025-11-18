@@ -1,0 +1,24 @@
+{% extends 'user/base.html' %}
+
+{% block body %}
+  <div class="top-actions">
+    <h2>Profile</h2>
+    <div class="row">
+      <a class="btn-ghost" href="{% url 'errands:dashboard' %}">Back to dashboard</a>
+      <a class="btn-ghost" href="{% url 'web_logout' %}">Logout</a>
+    </div>
+  </div>
+
+  <section>
+    <div class="card">
+      <h3>{{ request.user.username }}</h3>
+      <p class="muted">Email: {{ profile.email|default:'(not set)' }}</p>
+      <p class="muted">Phone: {{ profile.phone_num|default:'(not set)' }}</p>
+      <p class="muted">VDA account: {% if profile.vda_account_number %}{{ profile.vda_account_number }} ({{ profile.vda_bank_name }}){% else %}<em>not created</em>{% endif %}</p>
+      <div style="margin-top:12px">
+        <a class="btn-ghost" href="{% url 'verify_and_create_vda' %}">Verify / Create VDA</a>
+        <a class="btn-ghost" href="{% url 'errands:create' %}">Create Errand</a>
+      </div>
+    </div>
+  </section>
+{% endblock %}

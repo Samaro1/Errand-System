@@ -6,6 +6,9 @@ class Customer(models.Model):
     username = models.CharField(max_length=20, unique=True)
     #To be hashed later
     password = models.CharField(max_length=128)
+    # minimal fields to interoperate with Django auth utilities used by sessions
+    last_login = models.DateTimeField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.username

@@ -1,0 +1,32 @@
+{% extends 'user/base.html' %}
+
+{% block body %}
+<div class="card">
+  <h2>Create a new Errand</h2>
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-row">
+      <label for="title">Title</label>
+      <input id="title" name="title" required value="{{ title|default:'' }}">
+    </div>
+    <div class="form-row">
+      <label for="description">Description</label>
+      <textarea id="description" name="description">{{ description|default:'' }}</textarea>
+    </div>
+    <div class="form-row">
+      <label for="price">Price (NGN)</label>
+      <input id="price" name="price" required value="{{ price|default:'' }}">
+    </div>
+    <div class="actions">
+      {% if warned %}
+        <p class="muted">We detected potentially illegal content: proceed only if you understand the policies.</p>
+        <input type="hidden" name="confirm" value="1">
+        <button type="submit">Confirm & Continue to Payment</button>
+      {% else %}
+        <button type="submit">Continue to Payment</button>
+      {% endif %}
+    </div>
+  </form>
+  {% if error %}<p style="color:red">{{ error }}</p>{% endif %}
+</div>
+{% endblock %}

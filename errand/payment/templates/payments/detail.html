@@ -1,0 +1,37 @@
+{% extends 'user/base.html' %}
+
+{% block body %}
+<h1>Payment {{ payment.reference }}</h1>
+<p>Errand: <a href="{% url 'errands:detail' payment.errand.id %}">{{ payment.errand.title }}</a></p>
+<p>Amount expected: {{ payment.amount_expected }}</p>
+<p>Amount paid: {{ payment.amount_paid }}</p>
+<p>Status: {{ payment.status }}</p>
+<p>Paid at: {{ payment.paid_at }}</p>
+<p>Provider transfer id: {{ payment.provider_transfer_id }}</p>
+<p>Provider transfer status: {{ payment.provider_transfer_status }}</p>
+<p>Provider refund id: {{ payment.provider_refund_id }}</p>
+<p>Provider refund status: {{ payment.provider_refund_status }}</p>
+
+{% if user.is_authenticated %}
+  {% if payment.payer == user and payment.status != 'success' %}
+    <form method="post" action="{% url 'payment:web_simulate_deposit' payment.id %}">
+      {% csrf_token %}
+      <button type="submit">Simulate Deposit (I paid)</button>
+    </form>
+  {% endif %}
+
+  {% if payment.errand.creator == user %}
+    <form method="post" action="{% url 'payment:web_simulate_payout' payment.id %}">
+      {% csrf_token %}
+      <button type="submit">Simulate Payout (release to runner)</button>
+    </form>
+
+    <form method="post" action="{% url 'payment:web_simulate_refund' payment.id %}">
+      {% csrf_token %}
+      <button type="submit">Simulate Refund</button>
+    </form>
+  {% endif %}
+{% endif %}
+
+<p><a href="{% url 'payment:web_payments_list' %}">Back to payments</a></p>
+{% endblock %}

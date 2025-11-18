@@ -18,4 +18,10 @@ urlpatterns = [
     # JWT utility routes
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+
+    # Web (session) views
+    path('', views.web_profile, name='profile'),
+    path('web/signup/', views.web_signup, name='web_signup'),
+    path('web/login/', views.web_login, name='web_login'),
+    path('web/logout/', views.web_logout, name='web_logout'),
 ]

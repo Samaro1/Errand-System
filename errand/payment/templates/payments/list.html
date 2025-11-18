@@ -1,0 +1,23 @@
+{% extends 'user/base.html' %}
+
+{% block body %}
+<h1>Your Payments</h1>
+<p><a href="{% url 'payment:web_initialize_payment' %}">Initialize Payment</a> | <a href="{% url 'web_logout' %}">Logout</a></p>
+<table border="1" cellpadding="6">
+<thead><tr><th>Reference</th><th>Errand</th><th>Amount</th><th>Paid</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>
+{% for p in payments %}
+<tr>
+  <td><a href="{% url 'payment:web_payment_detail' p.id %}">{{ p.reference }}</a></td>
+  <td>{{ p.errand.title }}</td>
+  <td>{{ p.amount_paid|default:p.amount_expected }}</td>
+  <td>{% if p.paid_at %}{{ p.paid_at }}{% else %}-{% endif %}</td>
+  <td>{{ p.status }}</td>
+  <td>
+    <a href="{% url 'payment:web_payment_detail' p.id %}">View</a>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

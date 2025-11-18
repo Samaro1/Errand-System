@@ -16,11 +16,22 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import RedirectView
+from errands import views as errands_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Root dispatcher: serve API list for authenticated/JSON clients, otherwise
+    # redirect anonymous browser users to the web login page.
+    path('', errands_views.root_dispatch, name='root_dispatch'),
     path('api/user/', include("user.urls")),
     path('api/errands/', include("errands.urls")),
     path('api/payment/', include("payment.urls")),
+    # also include a namespaced copy so tests and templates can reverse as 'payment:...'
+    path('payment_ns/', include(("payment.urls", "payment"), namespace="payment")),
+    # Web (server-rendered) front-end (mounted with 'errands' namespace so
+    # templates and redirects can reverse 'errands:list')
+    path('', include(("errands.urls", "errands"), namespace="errands")),
+    path('user/', include('user.urls')),
 ]
 
